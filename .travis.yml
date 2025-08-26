@@ -88,21 +88,12 @@ script:
 after_success: codecov
 
 
-# modified jobs: OSX + Windows, newest Python version =========================
+# modified jobs for Windows, newest Python version =========================
 # (inherit only 1st `env.jobs` entry)
 
 jobs:
   fast_finish: true
   include:
-    - os: osx
-      osx_image: xcode14
-      language: shell
-      before_install:
-        - export ARCH=MacOSX-x86_64 SED=gsed
-        - | # install executables via Homebrew: GNU `sed`
-          export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1
-          travis_retry brew install gnu-sed
-
     - os: windows
       language: shell
       before_install:
