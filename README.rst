@@ -113,7 +113,7 @@ Dependencies
 ............
 ``pyunicorn`` is implemented in `Python 3 <https://docs.python.org/3/>`_ /
 `Cython 3 <https://cython.org/>`_, is `tested
-<https://app.travis-ci.com/github/pik-copan/pyunicorn>`_ on *Linux*, *macOS*
+<https://app.travis-ci.com/github/pik-copan/pyunicorn>`_ on *Linux*
 and *Windows*, and relies on the following packages:
 
 - Required:
