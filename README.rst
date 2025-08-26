@@ -145,7 +145,7 @@ HTML and PDF documentation can be generated using ``Sphinx``::
     $> pip install .[docs]
     $> cd docs; make clean html latexpdf
 
-Tuturials
+Tutorials
 ---------
 
 For some example applications look into the

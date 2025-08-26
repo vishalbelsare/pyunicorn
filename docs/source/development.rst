@@ -1,3 +1,3 @@
 
 .. include:: ../../README.rst
-    :start-after: $> cd docs; make clean html latexpdf
+    :start-after: Jupyter notebooks.
