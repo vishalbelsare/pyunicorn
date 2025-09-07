@@ -2820,10 +2820,10 @@ class Network(Cached):
     #  Node valued centrality measures
     #
 
-    @Cached.method(name="node betweenness")
-    def betweenness(self):
+    @Cached.method(name="node betweenness", attrs=("_mut_la",))
+    def betweenness(self, link_attribute=None):
         """
-        For each node, return its betweenness.
+        For each node, return its (weighted) betweenness.
 
         This measures roughly how many shortest paths pass through the node.
 
@@ -2833,6 +2833,8 @@ class Network(Cached):
         Calculating node betweenness...
         array([ 4.5,  1.5,  0. ,  1. ,  3. ,  0. ])
 
+        :arg str link_attribute: Optional name of the link attribute to be used
+            as the links' length. If None, links have length 1. (Default: None)
         :rtype: 1d numpy array [node] of floats >= 0
         """
         #  Return the absolute value of normed tbc, since a bug sometimes
@@ -2842,7 +2844,7 @@ class Network(Cached):
         #  This restricts TBC to 0 <= TBC <= 1
         # maxTBC =  ( self.N**2 - 3 * self.N + 2 ) / 2
 
-        return np.abs(np.array(self.graph.betweenness()))
+        return np.abs(np.array(self.graph.betweenness(weights=link_attribute)))
 
     def interregional_betweenness(self, sources=None, targets=None):
         """

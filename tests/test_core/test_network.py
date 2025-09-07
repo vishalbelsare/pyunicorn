@@ -768,8 +768,14 @@ def test_edge_betweenness():
 
 
 def test_betweenness():
-    res = Network.SmallTestNetwork().betweenness()
+    net = Network.SmallTestNetwork()
+
+    res = net.betweenness()
     exp = np.array([4.5, 1.5, 0., 1., 3., 0.])
+    assert np.allclose(res, exp)
+
+    res = res = net.betweenness(link_attribute="link_weights")
+    exp = np.array([5., 1., 0., 2., 2., 0.])
     assert np.allclose(res, exp)
 
 
