@@ -2820,10 +2820,10 @@ class Network(Cached):
     #  Node valued centrality measures
     #
 
-    @Cached.method(name="node betweenness")
-    def betweenness(self):
+    @Cached.method(name="node betweenness", attrs=("_mut_la",))
+    def betweenness(self, link_attribute=None):
         """
-        For each node, return its betweenness.
+        For each node, return its (weighted) betweenness.
 
         This measures roughly how many shortest paths pass through the node.
 
@@ -2833,6 +2833,8 @@ class Network(Cached):
         Calculating node betweenness...
         array([ 4.5,  1.5,  0. ,  1. ,  3. ,  0. ])
 
+        :arg str link_attribute: Optional name of the link attribute to be used
+            as the links' length. If None, links have length 1. (Default: None)
         :rtype: 1d numpy array [node] of floats >= 0
         """
         #  Return the absolute value of normed tbc, since a bug sometimes
@@ -2842,7 +2844,7 @@ class Network(Cached):
         #  This restricts TBC to 0 <= TBC <= 1
         # maxTBC =  ( self.N**2 - 3 * self.N + 2 ) / 2
 
-        return np.abs(np.array(self.graph.betweenness()))
+        return np.abs(np.array(self.graph.betweenness(weights=link_attribute)))
 
     def interregional_betweenness(self, sources=None, targets=None):
         """
@@ -2960,22 +2962,28 @@ class Network(Cached):
         assert all(isinstance(arg, tuple) for arg in [is_source, targets])
         is_source = np.array(is_source, dtype=MASK)
         targets = np.array(targets, dtype=NODE)
-        k = to_cy(self.outdegree(), DEGREE)
+        k_in = to_cy(self.indegree(), DEGREE)
+        k_out = to_cy(self.outdegree(), DEGREE) if self.directed else k_in
 
         # initialize node weights
         w = to_cy(self.node_weights, DWEIGHT)
         w = w if nsi else np.ones_like(w)
 
-        # sort links by node indices (contains each link twice!)
-        links = nz_coords(self.sp_A)
+        # list of INCOMING links (contains each link twice if undirected)
+        in_links = nz_coords(self.sp_A.T)
 
-        # neighbours of each node
-        flat_neighbors = to_cy(np.array(links)[:, 1], NODE)
-        assert k.sum() == len(flat_neighbors) == 2 * self.n_links
+        # incoming-link-neighbours of each node
+        flat_neighbors = to_cy(np.array(in_links)[:, 1], NODE)
+
+        # assert consistency of array lengths
+        E = self.n_links if self.directed else 2*self.n_links
+        assert k_in.sum() == len(flat_neighbors) == E, \
+            "Inconsistency in number of links and neighbors."
 
         # call Cython implementation
         worker = partial(_nsi_betweenness,
-                         self.N, w, k, flat_neighbors, is_source)
+                         self.N, w, k_in, k_out, self.directed,
+                         flat_neighbors, is_source)
         if parallelize:
             # (naively) parallelize loop over nodes
             n_workers = cpu_count()
