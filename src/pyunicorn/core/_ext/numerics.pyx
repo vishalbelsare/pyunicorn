@@ -24,7 +24,7 @@ randint = rd.randint
 
 from ...core._ext.types import NODE, DEGREE, FIELD, DFIELD
 from ...core._ext.types cimport \
-    ADJ_t, MASK_t, NODE_t, DEGREE_t, WEIGHT_t, DWEIGHT_t, FIELD_t, DFIELD_t
+    BOOLTYPE_t, ADJ_t, MASK_t, NODE_t, DEGREE_t, WEIGHT_t, DWEIGHT_t, FIELD_t, DFIELD_t
 
 cdef extern from "src_numerics.c":
     double _vertex_current_flow_betweenness_fast(int N, double Is, double It,
@@ -397,7 +397,9 @@ def _local_cliquishness_5thorder(
 
 def _nsi_betweenness(
     int N, ndarray[DWEIGHT_t, ndim=1] w,
-    ndarray[DEGREE_t, ndim=1] k,
+    ndarray[DEGREE_t, ndim=1] k_in,
+    ndarray[DEGREE_t, ndim=1] k_out,
+    BOOLTYPE_t directed,
     ndarray[NODE_t, ndim=1] flat_neighbors,
     ndarray[MASK_t, ndim=1] is_source,
     ndarray[NODE_t, ndim=1] targets):
@@ -410,10 +412,11 @@ def _nsi_betweenness(
         int j, qi, oi, queue_len, l_index, ql
         NODE_t l, i, next_d, dl, ol, fi
         DFIELD_t base_factor
-        ndarray[NODE_t, ndim=1] offsets = np.zeros(N, dtype=NODE)
+        ndarray[NODE_t, ndim=1] neighbors_offsets = np.zeros(N, dtype=NODE)
         ndarray[NODE_t, ndim=1] distances_to_j = np.ones(N, dtype=NODE)
         ndarray[NODE_t, ndim=1] n_predecessors = np.zeros(N, dtype=NODE)
         ndarray[NODE_t, ndim=1] flat_predecessors = np.zeros(E, dtype=NODE)
+        ndarray[NODE_t, ndim=1] predecessors_offsets = np.zeros(N, dtype=NODE)
         ndarray[NODE_t, ndim=1] queue = np.zeros(N, dtype=NODE)
         ndarray[DFIELD_t, ndim=1] multiplicity_to_j = np.zeros(N, dtype=DFIELD)
         ndarray[DFIELD_t, ndim=1] betweenness_to_j = np.zeros(N, dtype=DFIELD)
@@ -423,7 +426,16 @@ def _nsi_betweenness(
     # init node offsets
     # NOTE: We don't use k.cumsum() since that uses too much memory!
     for i in range(1, N):
-        offsets[i] = offsets[i-1] + k[i-1]
+        # prepare indexation via IN-degree for calculation of paths TO j
+        neighbors_offsets[i] = neighbors_offsets[i-1] + k_in[i-1]
+
+    if directed:
+        for i in range(1, N):
+            # prepare indexation via OUT-degree for storing predecessors
+            predecessors_offsets[i] = predecessors_offsets[i-1] + k_out[i-1]
+    else:
+        # no need to differentiate on undirected networks
+        predecessors_offsets = neighbors_offsets
 
     for j in targets:
         # init distances to j and queue of nodes by distance from j
@@ -453,13 +465,13 @@ def _nsi_betweenness(
                 break
             next_d = distances_to_j[i] + 1
             # iterate through all neighbors l of i
-            oi = offsets[i]
-            for l_index in range(oi, oi+k[i]):
-                # if on a shortest j-l-path, register i as predecessor of l
+            oi = neighbors_offsets[i]
+            for l_index in range(oi, oi+k_in[i]):
+                # if on a shortest l-j-path, register i as predecessor of l
                 l = flat_neighbors[l_index]
                 dl = distances_to_j[l]
                 if dl >= next_d:
-                    fi = offsets[l] + n_predecessors[l]
+                    fi = predecessors_offsets[l] + n_predecessors[l]
                     n_predecessors[l] += 1
                     flat_predecessors[fi] = i
                     multiplicity_to_j[l] += w[l] * multiplicity_to_j[i]
@@ -483,7 +495,7 @@ def _nsi_betweenness(
             else:
                 # otherwise, iterate through all predecessors i of l:
                 base_factor = w[l] / multiplicity_to_j[l]
-                ol = offsets[l]
+                ol = predecessors_offsets[l]
                 for fi in range(ol, ol+n_predecessors[l]):
                     # add betweenness to predecessor
                     i = flat_predecessors[fi]

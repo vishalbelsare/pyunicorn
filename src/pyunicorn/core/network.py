@@ -2962,22 +2962,28 @@ class Network(Cached):
         assert all(isinstance(arg, tuple) for arg in [is_source, targets])
         is_source = np.array(is_source, dtype=MASK)
         targets = np.array(targets, dtype=NODE)
-        k = to_cy(self.outdegree(), DEGREE)
+        k_in = to_cy(self.indegree(), DEGREE)
+        k_out = to_cy(self.outdegree(), DEGREE) if self.directed else k_in
 
         # initialize node weights
         w = to_cy(self.node_weights, DWEIGHT)
         w = w if nsi else np.ones_like(w)
 
-        # sort links by node indices (contains each link twice!)
-        links = nz_coords(self.sp_A)
+        # list of INCOMING links (contains each link twice if undirected)
+        in_links = nz_coords(self.sp_A.T)
 
-        # neighbours of each node
-        flat_neighbors = to_cy(np.array(links)[:, 1], NODE)
-        assert k.sum() == len(flat_neighbors) == 2 * self.n_links
+        # incoming-link-neighbours of each node
+        flat_neighbors = to_cy(np.array(in_links)[:, 1], NODE)
+
+        # assert consistency of array lengths
+        E = self.n_links if self.directed else 2*self.n_links
+        assert k_in.sum() == len(flat_neighbors) == E, \
+            "Inconsistency in number of links and neighbors."
 
         # call Cython implementation
         worker = partial(_nsi_betweenness,
-                         self.N, w, k, flat_neighbors, is_source)
+                         self.N, w, k_in, k_out, self.directed,
+                         flat_neighbors, is_source)
         if parallelize:
             # (naively) parallelize loop over nodes
             n_workers = cpu_count()
