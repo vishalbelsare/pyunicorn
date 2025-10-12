@@ -145,7 +145,7 @@ def test_nsi():
     nsi_measures = ["nsi_degree", "nsi_indegree", "nsi_outdegree",
                     "nsi_closeness", "nsi_harmonic_closeness",
                     "nsi_exponential_closeness", "nsi_arenas_betweenness",
-                    "nsi_spreading",
+                    "nsi_betweenness", "nsi_spreading",
                     "nsi_local_cyclemotif_clustering",
                     "nsi_local_midmotif_clustering",
                     "nsi_local_inmotif_clustering",
@@ -800,14 +800,23 @@ def test_nsi_interregional_betweenness():
 
 @pytest.mark.parametrize("parallelize", [False, True])
 def test_nsi_betweenness(parallelize):
-    net = Network.SmallTestNetwork()
-
-    res = net.nsi_betweenness(parallelize=parallelize)
+    # undirected network
+    res = Network.SmallTestNetwork().nsi_betweenness(parallelize=parallelize)
     exp = np.array([29.68541738, 7.7128677, 0., 3.09090906, 9.69960462, 0.])
     assert np.allclose(res, exp)
+    # directed network
+    res = Network.SmallDirectedTestNetwork() \
+        .nsi_betweenness(parallelize=parallelize)
+    exp = np.array([21.54, 16.92352941, 0., 0., 4.03043478, 0.])
+    assert np.allclose(res, exp)
 
-    res = net.splitted_copy().nsi_betweenness(parallelize=parallelize)
-    exp = np.append(exp, [0.])
+
+def test_nsi_betweenness_directed():
+    """test consistency of pyunicorn and igraph implementations"""
+    net = Network.SmallDirectedTestNetwork()
+
+    res = net.nsi_betweenness(nsi=False)  # implemented in pyunicorn
+    exp = net.betweenness()  # resorts to igraph
     assert np.allclose(res, exp)
 
 
