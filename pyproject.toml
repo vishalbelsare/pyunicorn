@@ -7,14 +7,129 @@
 
 [build-system]
 requires = [
-    "setuptools>=65",
-    "wheel",
-    "Cython>=3.0",
-    "numpy>=1.24"
+  "setuptools>=65",
+  "wheel",
+  "Cython>=3.0",
+  "numpy>=1.24"
 ]
 build-backend = "setuptools.build_meta"
 
-# unit tests ===================================================================
+[project]
+name = "pyunicorn"
+version = "0.8.2"
+description = "Unified complex network and recurrence analysis toolbox"
+keywords = [
+  "complex network", "nonlinear time series analysis",
+  "climate network", "recurrence plot", "surrogate model"
+]
+readme = "README.rst"
+authors = [
+  { name = "Jonathan F. Donges", email = "donges@pik-potsdam.de" }
+]
+maintainers = [
+  { name = "Fritz Kühlein", email = "fritzku@pik-potsdam.de" },
+  { name = "Boyan Beronov", email = "beronov@cs.ubc.ca" },
+]
+license = "BSD-3-Clause"
+license-files = ["LICENSE.txt"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: GIS",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+  "Topic :: Scientific/Engineering :: Mathematics",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Framework :: Pytest",
+]
+requires-python = ">=3.9"
+dependencies = [
+  "numpy >= 1.24",
+  "scipy >= 1.10",
+  "igraph >= 0.11",
+  "h5netcdf >= 1.1",
+  "tqdm >= 4.66",
+]
+
+[dependency-groups]
+dev = [
+  "Cython >= 3.0",
+]
+tests = [
+  "tox >= 4.11",
+  "flake8 >= 7.0",
+  "Flake8-pyproject >= 1.2",
+  "pylint >= 3.0",
+  "pytest >= 8.0",
+  "pytest-xdist >= 3.5",
+  "pytest-cov >= 4.1",
+  "networkx >= 3.1",
+  "matplotlib >= 3.6",
+  "cartopy >= 0.21",
+  "requests",
+  "psutil",
+]
+docs = [
+  "sphinx >= 7.0",
+  "nbsphinx >= 0.9.3",
+  "ipython >= 8.4",
+  "pandoc >= 2.3",
+  "matplotlib >= 3.6",
+]
+
+[project.urls]
+Homepage = "https://www.pik-potsdam.de/members/donges/software-2/software"
+Documentation = "http://www.pik-potsdam.de/~donges/pyunicorn/"
+Repository = "https://github.com/pik-copan/pyunicorn"
+Changelog = "https://github.com/pik-copan/pyunicorn/blob/master/CHANGELOG.rst"
+Issues = "https://github.com/pik-copan/pyunicorn/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = [ "src" ]
+include = [ "pyunicorn*" ]
+
+# testing ======================================================================
+
+[tool.tox]
+env_list = ["style", "lint", "test", "docs"]
+skipsdist = true
+
+[tool.tox.env_run_base]
+sitepackages = true
+set_env = { PYTHONPATH = "{tox_root}/src" }
+pass_env = ["WINDIR", "LC_ALL"]
+allowlist_externals = ["flake8", "pylint", "pytest", "sphinx-build", "pandoc"]
+
+[tool.tox.env.style]
+package = "skip"
+commands = [["flake8", "src/pyunicorn", "tests"]]
+
+[tool.tox.env.lint]
+package = "skip"
+commands = [["pylint", "src/pyunicorn", "tests"]]
+
+[tool.tox.env.test]
+package = "sdist"
+commands = [["pytest", "--cov"]]
+
+[tool.tox.env.docs]
+package = "sdist"
+commands = [[
+  "sphinx-build", "-v", "-j", "8", "-W", "-b", "html",
+  "-d", "{envtmpdir}/doctrees", "docs/source", "{envtmpdir}/html"
+]]
 
 [tool.pytest.ini_options]
 minversion = 7.3
@@ -23,7 +138,7 @@ testpaths = ["tests"]
 python_files = ["test*.py", "Test*.py"]
 norecursedirs = [".git", ".cache", ".tox", ".ropeproject", "build"]
 filterwarnings = [
-    "ignore:datetime.datetime.utcfromtimestamp():DeprecationWarning:dateutil|tqdm",
+  "ignore:datetime.datetime.utcfromtimestamp():DeprecationWarning:dateutil|tqdm",
 ]
 
 [tool.coverage.run]
@@ -33,10 +148,18 @@ source = ["src/pyunicorn"]
 
 # static analysis ==============================================================
 
+[tool.flake8]
+extend-exclude = [
+  ".git", ".cache", ".tox", ".ropeproject", "build", "docs/source/conf.py"
+]
+per-file-ignores = [
+  "*/__init__.py:F401,F403",
+]
+
 [tool.pylint.main]
 ignore = [
-    ".cache", "__pycache__", ".pytest_cache", ".tox", ".venv", ".ropeproject",
-    "build", "mpi.py"
+  ".cache", "__pycache__", ".pytest_cache", ".tox", ".venv", ".ropeproject",
+  "build", "mpi.py"
 ]
 ignore-patterns = ["navigator", "numerics"]
 persistent = false
@@ -44,9 +167,9 @@ jobs = 0
 
 [tool.pylint."messages control"]
 disable = [
-    "duplicate-code", "invalid-name", "fixme",
-    "missing-docstring", "no-else-return",
-    "arguments-differ", "no-name-in-module"
+  "duplicate-code", "invalid-name", "fixme",
+  "missing-docstring", "no-else-return",
+  "arguments-differ", "no-name-in-module"
 ]
 
 [tool.pylint.format]
