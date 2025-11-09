@@ -16,14 +16,23 @@
 Consistency checks for the method caching mix-in.
 """
 
+# pylint: disable=no-member
+
+from functools import _lru_cache_wrapper
+from gc import get_referrers as srefs
+from weakref import getweakrefcount as wrefc
+
 import pytest
 import numpy as np
 
-from pyunicorn.core.cache import Cached
+from pyunicorn.core.cache import Cached, CacheRef
 
 
 # pylint: disable=disallowed-name
 class TestCached:
+
+    # increase for testing purposes
+    Cached.lru_params_local["maxsize"] = 8
 
     class Foo(Cached):
         silence_level = 1
@@ -58,94 +67,117 @@ class TestCached:
         """
         Dependence on method arguments.
         """
-        # immutable instances
+        gs = Cached.lru_params_global["maxsize"]
+        ls = Cached.lru_params_local["maxsize"]
+        b = 5
+
+        # immutable instance
         X = cls.Foo()
 
         # wrapped method metadata
         methods = ["foo1", "foo2", "bar"]
-        assert all(getattr(X, f).__doc__ == f.capitalize() for f in methods)
+        assert all(getattr(X, m).__doc__ == m.capitalize() for m in methods)
 
+        # method calls
         for _ in range(3):
-            # method calls
             X.cache_clear()
-            m = Cached.lru_params["maxsize"]
 
-            r1, o1 = [], []
-            for _ in range(m + 1):
-                r1.append(X.foo1(1))
-                # pylint: disable-next=no-member
-                o1.append(cls.Foo.foo1.__wrapped__(X, 1))
-            r1.append(X.foo1(1.0))
-            assert all(r == r1[0] for r in r1)
-            assert all(r == o for r, o in zip(r1, o1))
+            for g in range(1, gs + 3):
+                g_ = min(g, gs)
+                X = cls.Foo()
 
-            r2, o2 = [], []
-            for i in range(2 * m):
-                r2.append(X.foo2(*range(i)))
-                # pylint: disable-next=no-member
-                o2.append(cls.Foo.foo2.__wrapped__(X, *range(i)))
-            assert (np.diff(r2) == range(2 * m - 1)).all()
-            assert all(r == o for r, o in zip(r2, o2))
+                r1, o1 = [], []
+                for _ in range(ls + 1):
+                    r1.append(X.foo1(1))
+                    o1.append(cls.Foo.foo1.__wrapped__(X, 1))
+                r1.append(X.foo1(1.0))
+                assert all(r == r1[0] for r in r1)
+                assert all(r == o for r, o in zip(r1, o1))
 
-            r3, o3 = [], []
-            for i in range(5):
-                r3.append(X.bar())
-                # pylint: disable-next=no-member
-                o3.append(cls.Foo.bar.__wrapped__(X))
-            assert all(r and isinstance(r, bool) for r in r3)
-            assert all(r == o for r, o in zip(r3, o3))
+                r2, o2 = [], []
+                for i in range(2 * ls):
+                    r2.append(X.foo2(*range(i)))
+                    o2.append(cls.Foo.foo2.__wrapped__(X, *range(i)))
+                assert (np.diff(r2) == range(2 * ls - 1)).all()
+                assert all(r == o for r, o in zip(r2, o2))
 
-            # cache lookups
-            c1, c2, c3 = (getattr(X, f).cache_info() for f in methods)
-            assert c1.maxsize == c2.maxsize == m
-            assert (c1.currsize, c1.misses, c1.hits) == (2, 2, m)
-            assert (c2.currsize, c2.misses, c2.hits) == (m, 2 * m, 0)
-            assert (c3.currsize, c3.misses, c3.hits) == (1, 1, 4)
+                r3, o3 = [], []
+                for i in range(b):
+                    r3.append(X.bar())
+                    o3.append(cls.Foo.bar.__wrapped__(X))
+                assert all(r and isinstance(r, bool) for r in r3)
+                assert all(r == o for r, o in zip(r3, o3))
+
+                # global cache lookups
+                gc1, gc2, gc3 = (getattr(X, m).cache_info() for m in methods)
+                assert gc1.maxsize == gc2.maxsize == gs
+                assert (gc1.currsize, gc1.misses, gc1.hits) == (
+                    g_, g, g * (ls + 1))
+                assert (gc2.currsize, gc2.misses, gc2.hits) == (
+                    g_, g, g * (2 * ls - 1))
+                assert (gc3.currsize, gc3.misses, gc3.hits) == (
+                    g_, g, g * (b - 1))
+
+                # local cache lookups
+                lc1, lc2, lc3 = (
+                    getattr(X, f"__cached_{m}__")().cache.cache_info()
+                    for m in methods)
+                assert lc1.maxsize == lc2.maxsize == lc3.maxsize == ls
+                assert (lc1.currsize, lc1.misses, lc1.hits) == (2, 2, ls)
+                assert (lc2.currsize, lc2.misses, lc2.hits) == (ls, 2 * ls, 0)
+                assert (lc3.currsize, lc3.misses, lc3.hits) == (1, 1, 4)
 
             # cache clearing
             X.cache_clear(prefix="foo")
-            c1, c2, c3 = (getattr(X, f).cache_info() for f in methods)
-            assert (c1.currsize, c1.misses, c1.hits) == (0, 0, 0)
-            assert (c2.currsize, c2.misses, c2.hits) == (0, 0, 0)
-            assert (c3.currsize, c3.misses, c3.hits) == (1, 1, 4)
+            gc1, gc2, gc3 = (getattr(X, m).cache_info() for m in methods)
+            assert (gc1.currsize, gc1.misses, gc1.hits) == (0, 0, 0)
+            assert (gc2.currsize, gc2.misses, gc2.hits) == (0, 0, 0)
+            assert (gc3.currsize, gc3.misses, gc3.hits) == (gs, g, g * 4)
 
             # logging behaviour
             capture = capfd.readouterr()
             assert capture.err == ""
-            assert capture.out.split("\n")[:-1] == [
-                "Calculating foo2..." for _ in range(2 * m)]
+            msg2 = "Calculating foo2..."
+            assert capture.out.split("\n")[:-1] == [msg2] * (g * 2 * ls)
 
     @classmethod
     def test_instance_immutable(cls):
         """
         Dependence on immutable instance attributes.
         """
+        ls = Cached.lru_params_local["maxsize"]
+
         # immutable instances
         X, Y = cls.Foo(), cls.Foo()
-        m = Cached.lru_params["maxsize"]
 
         # method calls
-        for i in range(m):
-            X.foo1(i)
-            Y.foo1(i)
-        Y.foo1(m-1)
+        for i in range(ls):
+            assert X.foo1(i) == Y.foo1(i) == i
+        Y.foo1(ls-1)
 
-        # cache lookups
-        x, y = (o.foo1.cache_info() for o in [X, Y])
-        assert x == y
-        assert (x.currsize, x.misses, x.hits) == (m, 2 * m, 1)
+        # global cache lookups
+        gx, gy = (o.foo1.cache_info() for o in [X, Y])
+        assert gx == gy
+        assert (gx.currsize, gx.misses, gx.hits) == (2, 2, 2 * (ls - 1) + 1)
+
+        # local cache lookups
+        lx, ly = (o.__cached_foo1__().cache.cache_info() for o in [X, Y])
+        assert (lx.currsize, lx.misses, lx.hits) == (ls, ls, 0)
+        assert (ly.currsize, ly.misses, ly.hits) == (ls, ls, 1)
 
         # cache clearing
         X.cache_clear()
-        x, y = (o.foo1.cache_info() for o in [X, Y])
-        assert x == y
-        assert (x.currsize, x.misses, x.hits) == (0, 0, 0)
+        gx, gy = (o.foo1.cache_info() for o in [X, Y])
+        assert gx == gy
+        assert (gx.currsize, gx.misses, gx.hits) == (0, 0, 0)
 
     @classmethod
     def test_instance_mutable(cls):
         """
         Dependence on mutable instance attributes.
         """
+        ls = Cached.lru_params_local["maxsize"]
+
         # mutable instances
         class Baz(cls.Bar):
             @Cached.method()
@@ -156,31 +188,37 @@ class TestCached:
         X, Y = Baz(), Baz()
 
         # method calls
-        m = Cached.lru_params["maxsize"]
-        k, n = 3, m // 2
-        assert k < n < m
-        for _ in range(n):
-            assert X.baz() == Y.baz()
+        k, n = 3, ls // 2
+        assert k < n < ls
+        for i in range(n):
+            assert X.baz() == Y.baz() == i + 1
         Y.counter = 0
         for _ in range(k):
             Y.baz()
 
-        # cache lookups
-        x, y = (o.baz.cache_info() for o in [X, Y])
-        assert x == y
-        assert (x.currsize, x.misses, x.hits) == (2 * n, 2 * n, k)
+        # global cache lookups
+        gx, gy = (o.baz.cache_info() for o in [X, Y])
+        assert gx == gy
+        assert (gx.currsize, gx.misses, gx.hits) == (2, 2, 2 * (n - 1) + k)
+
+        # local cache lookups
+        lx, ly = (o.__cached_baz__().cache.cache_info() for o in [X, Y])
+        assert (lx.currsize, lx.misses, lx.hits) == (n, n, 0)
+        assert (ly.currsize, ly.misses, ly.hits) == (n, n, k)
 
         # cache clearing
         X.cache_clear()
-        x, y = (o.baz.cache_info() for o in [X, Y])
-        assert x == y
-        assert (x.currsize, x.misses, x.hits) == (0, 0, 0)
+        gx, gy = (o.baz.cache_info() for o in [X, Y])
+        assert gx == gy
+        assert (gx.currsize, gx.misses, gx.hits) == (0, 0, 0)
 
     @classmethod
     def test_instance_rec(cls):
         """
         Dependence on owned `Cached` instances.
         """
+        ls = Cached.lru_params_local["maxsize"]
+
         # mutable instances
         class BarFoo(cls.Bar):
             def __init__(self, foo: cls.Foo):
@@ -197,31 +235,38 @@ class TestCached:
                 return f
 
         # method calls
-        m = Cached.lru_params["maxsize"]
         X = BarFoo(cls.Foo())
-        for i in range(m):
+        for i in range(ls):
             assert X.baz(i) == i
-        assert X.counter == m
-        for i in range(m):
+        assert X.counter == ls
+        for i in range(ls):
             assert X.baz(i) == i
-        assert X.counter == 2 * m
+        assert X.counter == 2 * ls
 
-        # cache lookups
-        x, y = (m.cache_info() for m in [X.baz, X.foo.foo1])
-        assert (x.currsize, x.misses, x.hits) == (m, 2 * m, 0)
-        assert (y.currsize, y.misses, y.hits) == (m, m, m)
+        # global cache lookups
+        gx, gy = (m.cache_info() for m in [X.baz, X.foo.foo1])
+        assert gx == gy
+        assert (gx.currsize, gx.misses, gx.hits) == (1, 1, 2 * ls - 1)
+
+        # local cache lookups
+        lx, ly = (m().cache.cache_info()
+                  for m in [X.__cached_baz__, X.foo.__cached_foo1__])
+        assert (lx.currsize, lx.misses, lx.hits) == (ls, 2 * ls, 0)
+        assert (ly.currsize, ly.misses, ly.hits) == (ls, ls, ls)
 
         # cache clearing
         X.cache_clear()
-        x, y = (m.cache_info() for m in [X.baz, X.foo.foo1])
-        assert (x.currsize, x.misses, x.hits) == (0, 0, 0)
-        assert (y.currsize, y.misses, y.hits) == (0, 0, 0)
+        gx, gy = (m.cache_info() for m in [X.baz, X.foo.foo1])
+        assert gx == gy
+        assert (gx.currsize, gx.misses, gx.hits) == (0, 0, 0)
 
     @classmethod
     def test_attributes(cls):
         """
         Dependence on method-specific attributes.
         """
+        ls = Cached.lru_params_local["maxsize"]
+
         # mutable instances
         class FooBaz(cls.Foo):
             def __init__(self):
@@ -251,47 +296,54 @@ class TestCached:
         assert all(o.baz.__doc__ == type(o).__name__ for o in [X, Y])
 
         # method calls
-        m = Cached.lru_params["maxsize"]
-        k, n = 3, m // 2
-        assert k < n < m
-        for _ in range(n):
-            X.baz()
-            Y.baz()
-        print()
+        k, n = 3, ls // 2
+        assert k < n < ls
+        for i in range(n):
+            assert X.baz() == i + 1
+            assert Y.baz() == 2 * (i + 1)
         X.secret = 0
         Y.secret = 0
-        for _ in range(n):
-            X.baz()
-            Y.baz()
-        print()
+        for i in range(n):
+            assert X.baz() == 1
+            assert Y.baz() == n + 2 * (i + 1)
         X.secret = 0
         Y.secret = 0
         Y.counter = 0
-        for _ in range(k):
-            X.baz()
-            Y.baz()
+        for i in range(k):
+            assert X.baz() == 1
+            assert Y.baz() == 2
 
-        # cache lookups
-        x1, y1 = (o.baz.cache_info() for o in [X, Y])
-        assert (x1.currsize, x1.misses, x1.hits) == (n, n, n + k)
-        assert (y1.currsize, y1.misses, y1.hits) == (2 * n, 2 * n, k)
+        # global cache lookups
+        gx1, gy1 = (o.baz.cache_info() for o in [X, Y])
+        assert (gx1.currsize, gx1.misses, gx1.hits) == (1, 1, 2 * n + k - 1)
+        assert gy1 == gx1
+
+        # local cache lookups
+        lx1, ly1 = (o.__cached_baz__().cache.cache_info() for o in [X, Y])
+        assert (lx1.currsize, lx1.misses, lx1.hits) == (n, n, n + k)
+        assert (ly1.currsize, ly1.misses, ly1.hits) == (2 * n, 2 * n, k)
 
         # cache clearing
         X.cache_clear()
-        x2, y2 = (o.baz.cache_info() for o in [X, Y])
-        assert (x2.currsize, x2.misses, x2.hits) == (0, 0, 0)
-        assert y2 == y1
+        gx2, gy2 = (o.baz.cache_info() for o in [X, Y])
+        assert (gx2.currsize, gx2.misses, gx2.hits) == (0, 0, 0)
+        assert gy2 == gy1
+        assert X.__cached_baz__() is None
+        ly2 = Y.__cached_baz__().cache.cache_info()
+        assert ly2 == ly1
         Y.cache_clear()
-        x3, y3 = (o.baz.cache_info() for o in [X, Y])
-        assert x3 == x2
-        assert (y3.currsize, y3.misses, y3.hits) == (0, 0, 0)
+        gx3, gy3 = (o.baz.cache_info() for o in [X, Y])
+        assert gx3 == gx2
+        assert gy3 == gx3
+        assert Y.__cached_baz__() is None
 
     @classmethod
     def test_disable(cls):
         """
-        Dependence on global switch.
+        Dependence on the global switch.
         """
         Cached.cache_enable = False
+        ls = Cached.lru_params_local["maxsize"]
 
         class Baz(cls.Bar):
             def __init__(self):
@@ -310,14 +362,100 @@ class TestCached:
         assert X.baz.__doc__ == "Baz"
 
         # method calls
-        m = Cached.lru_params["maxsize"]
-        for _ in range(2 * m):
+        for _ in range(2 * ls):
             X.baz()
 
         # no caching
         assert X.counter == 0
-        assert X.undeclared_counter == 2 * m
+        assert X.undeclared_counter == 2 * ls
         assert not hasattr(X.baz, "cache_info")
 
         # no-op
         X.cache_clear()
+
+    @classmethod
+    def test_refcount(cls):
+        """
+        Interaction with the garbage collector.
+        """
+        ls = Cached.lru_params_local["maxsize"]
+        b = 5
+
+        class FooBar(cls.Foo):
+            def __init__(self, referent: cls.Bar):
+                self.referent = referent
+
+            @Cached.method()
+            def bar(self) -> cls.Bar:
+                return self.referent
+
+            def __del__(self):
+                self.referent.counter += 1
+
+        # tracked instance
+        Z = cls.Bar()
+        X = FooBar(Z)
+        assert (srefs(Z), wrefc(Z)) == ([X], 0)
+
+        # global cache parametrisation
+        methods = ["foo1", "foo2", "bar"]
+        for m in methods:
+            assert getattr(X, m).__wrapped__ is getattr(FooBar, m).__wrapped__
+            assert getattr(X, m).cache_clear is getattr(FooBar, m).cache_clear
+            assert getattr(X, m).cache_parameters() == Cached.lru_params_global
+
+        # sequence designed to cover the case of dead local caches
+        for del_instance in [False, True]:
+
+            # empty cache
+            r = 0
+            assert (srefs(X), wrefc(X)) == ([], r)
+
+            # method calls
+            for i in range(ls + b):
+                if i == 0:
+                    # expect new `ref(X)` in global cache
+                    r += 1
+                for m in methods:
+                    if m == "foo1":
+                        assert X.foo1(i) == i
+                    elif m == "foo2":
+                        assert X.foo2() == 0
+                    elif m == "bar":
+                        assert X.bar() is Z
+                    assert X in srefs(Z) and len(srefs(Z)) <= 2
+                    if i == 0:
+                        # expect new `ref(X)` in local cache
+                        r += 1
+                        z = set(srefs(Z)) - set([X])
+                        if m == "bar":
+                            assert isinstance(z.pop(), _lru_cache_wrapper)
+                        else:
+                            assert not z
+                    assert wrefc(X) == r
+
+            # populated global/local caches
+            for m in methods:
+                assert getattr(FooBar, m).cache_info().currsize == 1
+                lc = getattr(X, f"__cached_{m}__")()
+                assert isinstance(lc, CacheRef)
+                assert lc.cache.cache_info().currsize == (
+                    ls if m == "foo1" else 1)
+                del lc
+            assert srefs(X) == []
+
+            if not del_instance:
+                # clear global and local caches, but keep instance
+                X.cache_clear()
+                assert (srefs(X), wrefc(X)) == ([], 0)
+                assert (srefs(Z), wrefc(Z)) == ([X], 0)
+                assert Z.counter == 0
+                for m in methods:
+                    assert getattr(FooBar, m).cache_info().currsize == 0
+            else:
+                # delete instance, but keep global cache
+                del X
+                assert (srefs(Z), wrefc(Z)) == ([], 0)
+                assert Z.counter == 1
+                for m in methods:
+                    assert getattr(FooBar, m).cache_info().currsize == 1
