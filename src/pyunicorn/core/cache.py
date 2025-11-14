@@ -20,7 +20,7 @@ attributes.
 
 from abc import ABC, abstractmethod
 from functools import lru_cache, _lru_cache_wrapper, wraps
-from weakref import ReferenceType, ref, finalize
+from weakref import ReferenceType, ref
 from inspect import getmembers, ismethod
 from typing import Any, Tuple, Optional
 from collections.abc import Hashable
@@ -30,16 +30,18 @@ from collections.abc import Hashable
 class CacheRef:
     """
     Internal coupling layer between the global (class level) and local
-    (instance level) caches maintained by a `Cached` subclass, i.e., a wrapper
-    around a local LRU cache that is held as a value in a global LRU cache.
+    (instance level) LRU caches maintained by a `Cached` subclass, i.e., a
+    wrapper that weakly references a local cache and that is held as a value in
+    a global cache.
 
-    The purpose of this wrapper is to organize logical associations and object
-    references in a way that allows for local cache finalization to be
-    triggered either globally (by clearing a method cache at the class level)
-    or locally (by an instance destruction).
+    The purpose of this wrapper is:
+      - to avoid strong references from a global to its local caches, so that
+        the latter can be destroyed together with the `Cached` instances owning
+        them,
+      - and to delete local caches when the global cache is cleared.
 
     Implementation details
-    ======================
+    ----------------------
 
     Rationale:
 
@@ -52,8 +54,7 @@ class CacheRef:
 
       Local cache:
         - logically associated to a `Cached` subclass instance and method
-        - owned (strongly referenced) by a `CacheRef` instance
-        - weakly referenced by a `Cached` subclass instance
+        - owned (strongly referenced) by a `Cached` subclass instance
         - populated by `@lru_cache(cached_local)`
         - holds as keys: method cache keys, as defined by `cached_local()` args
         - holds as values: cached method results
@@ -68,55 +69,56 @@ class CacheRef:
            ==> .keys()               : dict_keys[<weakref to Cached object>]
             --> ()                   : <Cached object>
            ==> .values()             : dict_values[<CacheRef object>]
-       ==> .__cached_{method}__      : <weakref to CacheRef object>
-        --> ()                       : <CacheRef object>
-         ==> .cache                  : _lru_cache_wrapper
-          ==> .<locals>.cache        : dict
-           ==> .keys()               : dict_keys[Tuple[...]]
-           ==> .values()             : dict_values[Any]
+            ==> .obj                 : <weakref to Cached object>
+             --> ()                  : <Cached object>
+       ==> .__cached_{method}__      : _lru_cache_wrapper
+        ==> .<locals>.cache          : dict
+         ==> .keys()                 : dict_keys[Tuple[...]]
+         ==> .values()               : dict_values[Any]
 
-    Call stack (~>) and runtime triggers (#>) during global finalization:
+    Call stack (~>) and runtime trigger (#>) during global clearing:
 
          <Cached.{method} method>.cache_clear()
       ~> <Cached.{method} method>.<locals>.cached_global.<locals>.cache.clear()
-      #> <CacheRef object>.__del__()               # no references left
-      ~> <CacheRef object>.finalizer.__call__()
-      ~> <CacheRef object>.cache.cache_clear()
-      ~> <CacheRef object>.cache.<locals>.cache.clear()
-
-    Call stack (~>) and runtime triggers (#>) during local finalization:
-
-         <Cached object>.__del__()
-      #> <CacheRef object>.finalizer.__call__()    # registered finalizer
-      ~> <CacheRef object>.cache.cache_clear()
-      ~> <CacheRef object>.cache.<locals>.cache.clear()
+      #> <CacheRef object>.__del__()  # no references left
+      ~> delattr(<Cached object>, "__cached_{method}__")
     """
 
-    __slots__ = ["__weakref__", "cache", "finalizer"]
+    __slots__ = ["obj", "attr"]
 
-    def __init__(self, obj, cache: _lru_cache_wrapper):
-        assert isinstance(cache, _lru_cache_wrapper)
-        self.cache = cache
-        self.finalizer = finalize(obj, self.cache.cache_clear)
+    def __init__(self, obj, attr: str):
+        assert isinstance(getattr(obj, attr), _lru_cache_wrapper)
+        self.obj: ReferenceType = ref(obj)
+        self.attr = attr
+
+    @property
+    def cache(self) -> _lru_cache_wrapper:
+        return getattr(self.obj(), self.attr)
 
     def __del__(self):
-        self.finalizer()
+        obj = self.obj()
+        if obj is not None:
+            delattr(obj, self.attr)
 
 
 class Cached(ABC):
     """
-    Mix-in class which manages, for each subclass method decorated with
+    A mix-in class which manages, for each subclass method decorated with
     `@Cached.method()`, one global (class level) and multiple local (instance
-    level) LRU caches implemented via `@functools.lru_cache()`. The global
-    cache essentially implements a single dispatch mechanism.
+    level) LRU caches that are implemented via `@functools.lru_cache()`. The
+    global cache essentially implements a single dispatch mechanism.
 
     The caches are populated simply by calling the decorated instance methods
-    with new arguments, they guarantee a bounded number of slots per method and
-    instance, and they are cleared upon instance finalisation. Individual cache
-    entries can be invalidated by mutating designated instance attributes.
-    Given a mix-in subclass instance `x`, a method cache can also be cleared by
-    calling `x.{method}.cache_clear()`, and all method caches can be cleared by
-    calling `x.cache_clear()`. For implementation details, see `CacheRef`.
+    with new arguments, and cache entries are invalidated when designated
+    instance attributes are mutated.
+
+    `Cached` guarantees a bounded number of global slots (cached instance) per
+    method, and a bounded number of local slots (cached argument tuples) per
+    method and instance. A local cache is destroyed together with its instance.
+    Given an instance `x`, a method cache can also be cleared by calling
+    `x.{method}.cache_clear()`, which destroys all associated local caches. All
+    method caches can be cleared by calling `x.cache_clear()`. For
+    implementation details, see `CacheRef`.
 
     To inherit these capabilities, a subclass needs to:
 
@@ -125,9 +127,9 @@ class Cached(ABC):
         which is used by `Cached` to define the `__eq__()` and `__hash__()`
         methods required by `@functools.lru_cache()`.
 
-    These mix-in class attributes affect subsequently *defined* subclasses:
+    These mix-in class attributes affect subsequently decorated methods:
 
-      - cache_enable:      toggles caching globally
+      - cache_enable:      toggles method caching
       - lru_params_global: sets global `@functools.lru_cache()` parameters
       - lru_params_local:  sets local `@functools.lru_cache()` parameters
 
@@ -186,7 +188,7 @@ class Cached(ABC):
         The decorated method provides several attributes of its own, as defined
         by `@functools.lru_cache()`, including:
 
-          - `cache_clear()`: delete this method cache for ALL class instances
+          - `cache_clear()`: empty the method cache for ALL class instances
           - `__wrapped__`: undecorated original method
 
         :arg name: Optionally print a message at the first method invocation.
@@ -196,6 +198,10 @@ class Cached(ABC):
 
             The same reasoning about consistency and cost applies to the
             `attrs` argument as to the `__cache_state__()` method.
+
+        Implementation detail
+        ---------------------
+        The local cache can be accssed at `obj.__cached_{method_name}__`.
         """
         # Evaluated at decorator instantiation.
         attrs = () if attrs is None else attrs
@@ -213,16 +219,16 @@ class Cached(ABC):
                 return f(self, *args, **kwargs)
 
             if cls.cache_enable:
-                def create_local_cache(self) -> CacheRef:
+                def create_local_cache(_self) -> _lru_cache_wrapper:
                     """ Evaluated at first global cache miss. """
-                    @lru_cache(**self.lru_params_local)
-                    def cached_local(_self, _h, name, _l, *args, **kwargs):
+                    # closure holding an instance weakref
+                    @lru_cache(**cls.lru_params_local)
+                    def cached_local(_h, name, _l, *args, **kwargs):
                         """ Evaluated at every local cache miss. """
                         # dereference instance, ignore hash after cache lookup,
                         # remove `attrs` from args
                         return uncached(_self(), name, *args[_l:], **kwargs)
-
-                    return CacheRef(self, cached_local)
+                    return cached_local
 
                 @lru_cache(**cls.lru_params_global)
                 def cached_global(_self: ReferenceType) -> CacheRef:
@@ -230,25 +236,24 @@ class Cached(ABC):
                     # dereference instance
                     self = _self()
                     assert self is not None, "encountered dead weakref"
-                    # access local cache, if previously instantiated and alive
-                    cache_ref_attr: str = f"__cached_{f.__name__}__"
-                    cache_ref = getattr(self, cache_ref_attr, lambda: None)()
-                    if cache_ref is None:
-                        # return local cache as value for global cache
-                        cache_ref: CacheRef = create_local_cache(self)
-                        # store weakref of local cache as instance attribute
-                        setattr(self, cache_ref_attr, ref(cache_ref))
-                    return cache_ref
+                    # access or create local cache
+                    cache_attr = f"__cached_{f.__name__}__"
+                    cached_local = getattr(self, cache_attr, None)
+                    if cached_local is None:
+                        cached_local = create_local_cache(_self)
+                        # store local cache as instance attribute
+                        setattr(self, cache_attr, cached_local)
+                    # store reference to local cache as global cache result
+                    return CacheRef(self, cache_attr)
 
                 @wraps(cached_global, assigned=('cache_info', 'cache_clear'))
                 def wrapped(self, *args, **kwargs):
                     """ Evaluated at every decorated method invocation. """
-                    # global cache: pass instance weakref, obtain local cache
-                    _self: ReferenceType = ref(self)
-                    cached_local = cached_global(_self).cache
-                    # local cache: pass instance hash, prepend `attrs` to args
+                    # pass instance weakref, obtain local cache
+                    cached_local = cached_global(ref(self)).cache
+                    # pass instance hash, prepend `attrs` to args
                     return cached_local(
-                        _self, hash(self.__cache_state__()), name,
+                        hash(self.__cache_state__()), name,
                         len(attrs), *(getattr(self, a) for a in attrs),
                         *args, **kwargs)
 
@@ -264,10 +269,6 @@ class Cached(ABC):
     def is_global_cache(attr) -> bool:
         return ismethod(attr) and all(
             hasattr(attr, p) for p in ("cache_clear", "__wrapped__"))
-
-    @staticmethod
-    def is_weakref(attr) -> bool:
-        return isinstance(attr, ReferenceType)
 
     def cache_clear(self, prefix: Optional[str] = None) -> None:
         """
@@ -294,24 +295,3 @@ class Cached(ABC):
         for attr in self.__cache_state__():
             if isinstance(attr, Cached):
                 attr.cache_clear(prefix=prefix)
-
-    def del_weakrefs(self) -> None:
-        """
-        Delete all weak references to local caches contained in this `Cached`
-        instance, and also recursively for any owned `Cached` instances listed
-        in `self.__cache_state__()`. This is typically required for serialising
-        instances.
-
-        NOTE:
-
-            `self.cache_clear()` should be called immediately beforehand.
-        """
-        for n, m in getmembers(self, predicate=self.is_weakref):
-            if n == "__weakref__":
-                continue
-            assert n.startswith("__cached_"), f"unexpected weakref: {n}"
-            assert m() is None, "first call `self.cache_clear()`"
-            delattr(self, n)
-        for attr in self.__cache_state__():
-            if isinstance(attr, Cached):
-                attr.del_weakrefs()

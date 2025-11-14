@@ -25,7 +25,7 @@ from weakref import getweakrefcount as wrefc
 import pytest
 import numpy as np
 
-from pyunicorn.core.cache import Cached, CacheRef
+from pyunicorn.core.cache import Cached
 
 
 # pylint: disable=disallowed-name
@@ -120,7 +120,7 @@ class TestCached:
 
                 # local cache lookups
                 lc1, lc2, lc3 = (
-                    getattr(X, f"__cached_{m}__")().cache.cache_info()
+                    getattr(X, f"__cached_{m}__").cache_info()
                     for m in methods)
                 assert lc1.maxsize == lc2.maxsize == lc3.maxsize == ls
                 assert (lc1.currsize, lc1.misses, lc1.hits) == (2, 2, ls)
@@ -161,7 +161,7 @@ class TestCached:
         assert (gx.currsize, gx.misses, gx.hits) == (2, 2, 2 * (ls - 1) + 1)
 
         # local cache lookups
-        lx, ly = (o.__cached_foo1__().cache.cache_info() for o in [X, Y])
+        lx, ly = (o.__cached_foo1__.cache_info() for o in [X, Y])
         assert (lx.currsize, lx.misses, lx.hits) == (ls, ls, 0)
         assert (ly.currsize, ly.misses, ly.hits) == (ls, ls, 1)
 
@@ -202,7 +202,7 @@ class TestCached:
         assert (gx.currsize, gx.misses, gx.hits) == (2, 2, 2 * (n - 1) + k)
 
         # local cache lookups
-        lx, ly = (o.__cached_baz__().cache.cache_info() for o in [X, Y])
+        lx, ly = (o.__cached_baz__.cache_info() for o in [X, Y])
         assert (lx.currsize, lx.misses, lx.hits) == (n, n, 0)
         assert (ly.currsize, ly.misses, ly.hits) == (n, n, k)
 
@@ -249,7 +249,7 @@ class TestCached:
         assert (gx.currsize, gx.misses, gx.hits) == (1, 1, 2 * ls - 1)
 
         # local cache lookups
-        lx, ly = (m().cache.cache_info()
+        lx, ly = (m.cache_info()
                   for m in [X.__cached_baz__, X.foo.__cached_foo1__])
         assert (lx.currsize, lx.misses, lx.hits) == (ls, 2 * ls, 0)
         assert (ly.currsize, ly.misses, ly.hits) == (ls, ls, ls)
@@ -319,7 +319,7 @@ class TestCached:
         assert gy1 == gx1
 
         # local cache lookups
-        lx1, ly1 = (o.__cached_baz__().cache.cache_info() for o in [X, Y])
+        lx1, ly1 = (o.__cached_baz__.cache_info() for o in [X, Y])
         assert (lx1.currsize, lx1.misses, lx1.hits) == (n, n, n + k)
         assert (ly1.currsize, ly1.misses, ly1.hits) == (2 * n, 2 * n, k)
 
@@ -328,14 +328,14 @@ class TestCached:
         gx2, gy2 = (o.baz.cache_info() for o in [X, Y])
         assert (gx2.currsize, gx2.misses, gx2.hits) == (0, 0, 0)
         assert gy2 == gy1
-        assert X.__cached_baz__() is None
-        ly2 = Y.__cached_baz__().cache.cache_info()
+        assert not hasattr(X, "__cached_baz__")
+        ly2 = Y.__cached_baz__.cache_info()
         assert ly2 == ly1
         Y.cache_clear()
         gx3, gy3 = (o.baz.cache_info() for o in [X, Y])
         assert gx3 == gx2
         assert gy3 == gx3
-        assert Y.__cached_baz__() is None
+        assert not hasattr(Y, "__cached_baz__")
 
     @classmethod
     def test_disable(cls):
@@ -425,8 +425,6 @@ class TestCached:
                         assert X.bar() is Z
                     assert X in srefs(Z) and len(srefs(Z)) <= 2
                     if i == 0:
-                        # expect new `ref(X)` in local cache
-                        r += 1
                         z = set(srefs(Z)) - set([X])
                         if m == "bar":
                             assert isinstance(z.pop(), _lru_cache_wrapper)
@@ -437,11 +435,8 @@ class TestCached:
             # populated global/local caches
             for m in methods:
                 assert getattr(FooBar, m).cache_info().currsize == 1
-                lc = getattr(X, f"__cached_{m}__")()
-                assert isinstance(lc, CacheRef)
-                assert lc.cache.cache_info().currsize == (
-                    ls if m == "foo1" else 1)
-                del lc
+                assert (getattr(X, f"__cached_{m}__").cache_info().currsize
+                        == (ls if m == "foo1" else 1))
             assert srefs(X) == []
 
             if not del_instance:

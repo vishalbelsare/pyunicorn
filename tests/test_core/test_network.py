@@ -56,17 +56,12 @@ def compare_measures(orig, pnets, rev_perms, tasks):
 
 
 def compare_permutations(net, permutations, measures):
-    # prepare tasks
     pnets, rev_perms = zip(
         *((net.permuted_copy(p), p.argsort()) for p in
           map(np.random.permutation, repeat(net.N, permutations))))
     tasks = list(product(measures, range(permutations)))
-    # remove weakrefs created by `@Cached.method`, which prevent serialisation
+    # attributes created by `@Cached.method` prevent serialisation
     net.cache_clear()
-    net.del_weakrefs()
-    for pnet in pnets:
-        pnet.del_weakrefs()
-    # distribute tasks
     cores = cpu_count()
     with get_context("spawn").Pool() as pool:
         pool.map(partial(compare_measures, net, pnets, rev_perms),
