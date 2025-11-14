@@ -49,6 +49,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Framework :: Pytest",
 ]
 requires-python = ">=3.9"
@@ -85,6 +86,9 @@ docs = [
   "pandoc >= 2.3",
   "matplotlib >= 3.6",
 ]
+
+[tool.uv]
+default-groups = ["dev", "tests", "docs"]
 
 [project.urls]
 Homepage = "https://www.pik-potsdam.de/members/donges/software-2/software"

@@ -89,25 +89,27 @@ Installation
 Official releases
 .................
 `Stable releases <https://pypi.org/project/pyunicorn/#history>`_ can be
-installed directly from the `Python Package Index (PyPI)
-<https://packaging.python.org/en/latest/tutorials/installing-packages/#installing-from-pypi>`_::
+installed from the `Python Package Index (PyPI) <https://pypi.org/>`_,
+using a Python package manager such as
+`pip <https://pip.pypa.io/en/latest/user_guide/>`__ or
+`uv <https://docs.astral.sh/uv/>`__::
 
     $> pip install pyunicorn
 
 Alternatively, source distributions can be downloaded from the
 `GitHub Releases <https://github.com/pik-copan/pyunicorn/releases>`_.
 
-On **Windows**, please *first* install the latest version of the `Microsoft C++ Build
-Tools <https://wiki.python.org/moin/WindowsCompilers>`_, which is required for
-compiling Cython modules.
+On **Windows**, please *first* install the latest version of the
+`Microsoft C++ Build Tools <https://wiki.python.org/moin/WindowsCompilers>`_,
+which is required for compiling Cython modules.
 
 Current development version
 ...........................
 In order to use a `newer version <https://github.com/pik-copan/pyunicorn>`_,
-please follow the ``pip`` instructions for installing from `version control
-<https://packaging.python.org/en/latest/tutorials/installing-packages/#installing-from-vcs>`_
-or from a `local source tree
-<https://packaging.python.org/en/latest/tutorials/installing-packages/#installing-from-a-local-src-tree>`_.
+please follow the `pip
+<https://packaging.python.org/en/latest/tutorials/installing-packages/#installing-from-vcs>`__
+or `uv <https://docs.astral.sh/uv/concepts/projects/dependencies/#git>`__
+instructions for installing from version control.
 
 Dependencies
 ............
@@ -142,7 +144,7 @@ For extensive HTML documentation, jump right to the `homepage
 <http://www.pik-potsdam.de/~donges/pyunicorn/>`_. In a local source tree,
 HTML and PDF documentation can be generated using ``Sphinx``::
 
-    $> pip install .[docs]
+    $> pip install --group docs
     $> cd docs; make clean html latexpdf
 
 Tutorials
@@ -162,7 +164,7 @@ please make sure that all tests pass. The test suite is managed by `tox
 <https://tox.wiki/>`_ and is configured to use system-wide packages
 when available. Install the test dependencies as follows::
 
-    $> pip install -e .[tests]
+    $> pip install --group tests
 
 The test suite can be run from anywhere in the project tree by issuing::
 

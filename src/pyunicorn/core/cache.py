@@ -26,7 +26,6 @@ from typing import Any, Tuple, Optional
 from collections.abc import Hashable
 
 
-# pylint: disable=too-few-public-methods
 class CacheRef:
     """
     Internal coupling layer between the global (class level) and local

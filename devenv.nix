@@ -27,6 +27,5 @@ in
 
   enterShell = ''
     . .devenv/state/venv/bin/activate
-    uv sync --group tests --group docs
   '';
 }
