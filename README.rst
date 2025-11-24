@@ -89,8 +89,7 @@ Installation
 Official releases
 .................
 `Stable releases <https://pypi.org/project/pyunicorn/#history>`_ can be
-installed from the `Python Package Index (PyPI) <https://pypi.org/>`_,
-using a Python package manager such as
+installed from the Python Package Index, using a Python package manager such as
 `pip <https://pip.pypa.io/en/latest/user_guide/>`__ or
 `uv <https://docs.astral.sh/uv/>`__::
 

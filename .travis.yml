@@ -43,7 +43,6 @@ env:
     - PYTHON=3.12
     - PYTHON=3.11
     - PYTHON=3.10
-    - PYTHON=3.9
 
 before_install: export ARCH=Linux-aarch64 SED=sed
 
@@ -102,6 +101,6 @@ jobs:
         - export PATH=/c/Python${PYTHON/.}:/c/Python${PYTHON/.}/Scripts:${PATH}
       install:
         - | # install executables via Chocolatey: Python, Pandoc, Codecov
-          travis_retry choco install python313
+          travis_retry choco install python${PYTHON/.}
           travis_retry python -m pip install --upgrade pip
           travis_retry choco install pandoc codecov
