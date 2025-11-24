@@ -16,11 +16,8 @@
 Consistency checks for the method caching mix-in.
 """
 
-# pylint: disable=no-member
-
-from functools import _lru_cache_wrapper
-from gc import get_referrers as srefs
-from weakref import getweakrefcount as wrefc
+from gc import get_referrers
+from weakref import getweakrefcount
 
 import pytest
 import numpy as np
@@ -28,7 +25,36 @@ import numpy as np
 from pyunicorn.core.cache import Cached
 
 
-# pylint: disable=disallowed-name
+def check_wrefc(referent: object, count: int):
+    """
+    Check the number of weak references to `referent`.
+    """
+    assert getweakrefcount(referent) == count
+
+
+def check_srefc(referent: object, count: int):
+    """
+    Check the number of strong references to `referent`.
+    """
+    assert len(get_referrers(referent)) == count
+
+
+def check_single_sref(referent: object, obj: object, attr: str):
+    """
+    Check that there is one strong reference to `referent`, namely `obj.attr`.
+    """
+    assert getattr(obj, attr) is referent
+    srefs = get_referrers(referent)
+    assert len(srefs) == 1
+    match srefs[0]:
+        # either return type can occur, depending on runtime internals
+        case dict() as r:
+            assert r[attr] is referent
+        case r:
+            assert r is obj
+
+
+# pylint: disable=no-member,disallowed-name
 class TestCached:
 
     # increase for testing purposes
@@ -395,7 +421,8 @@ class TestCached:
         # tracked instance
         Z = cls.Bar()
         X = FooBar(Z)
-        assert (srefs(Z), wrefc(Z)) == ([X], 0)
+        check_single_sref(Z, X, "referent")
+        check_wrefc(Z, 0)
 
         # global cache parametrisation
         methods = ["foo1", "foo2", "bar"]
@@ -409,7 +436,8 @@ class TestCached:
 
             # empty cache
             r = 0
-            assert (srefs(X), wrefc(X)) == ([], r)
+            check_srefc(X, 0)
+            check_wrefc(X, r)
 
             # method calls
             for i in range(ls + b):
@@ -417,40 +445,38 @@ class TestCached:
                     # expect new `ref(X)` in global cache
                     r += 1
                 for m in methods:
-                    if m == "foo1":
-                        assert X.foo1(i) == i
-                    elif m == "foo2":
-                        assert X.foo2() == 0
-                    elif m == "bar":
-                        assert X.bar() is Z
-                    assert X in srefs(Z) and len(srefs(Z)) <= 2
-                    if i == 0:
-                        z = set(srefs(Z)) - set([X])
-                        if m == "bar":
-                            assert isinstance(z.pop(), _lru_cache_wrapper)
-                        else:
-                            assert not z
-                    assert wrefc(X) == r
+                    match m:
+                        case "foo1":
+                            assert X.foo1(i) == i
+                        case "foo2":
+                            assert X.foo2() == 0
+                        case "bar":
+                            assert X.bar() is Z
+                    check_srefc(Z, 1 if (i == 0 and not m == "bar") else 2)
+                    check_wrefc(X, r)
 
             # populated global/local caches
             for m in methods:
                 assert getattr(FooBar, m).cache_info().currsize == 1
                 assert (getattr(X, f"__cached_{m}__").cache_info().currsize
                         == (ls if m == "foo1" else 1))
-            assert srefs(X) == []
+            check_srefc(X, 0)
 
             if not del_instance:
                 # clear global and local caches, but keep instance
                 X.cache_clear()
-                assert (srefs(X), wrefc(X)) == ([], 0)
-                assert (srefs(Z), wrefc(Z)) == ([X], 0)
+                check_srefc(X, 0)
+                check_wrefc(X, 0)
+                check_single_sref(Z, X, "referent")
+                check_wrefc(Z, 0)
                 assert Z.counter == 0
                 for m in methods:
                     assert getattr(FooBar, m).cache_info().currsize == 0
             else:
                 # delete instance, but keep global cache
                 del X
-                assert (srefs(Z), wrefc(Z)) == ([], 0)
+                check_srefc(Z, 0)
+                check_wrefc(Z, 0)
                 assert Z.counter == 1
                 for m in methods:
                     assert getattr(FooBar, m).cache_info().currsize == 1
