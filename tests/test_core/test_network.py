@@ -60,6 +60,8 @@ def compare_permutations(net, permutations, measures):
         *((net.permuted_copy(p), p.argsort()) for p in
           map(np.random.permutation, repeat(net.N, permutations))))
     tasks = list(product(measures, range(permutations)))
+    # attributes created by `@Cached.method` prevent serialisation
+    net.cache_clear()
     cores = cpu_count()
     with get_context("spawn").Pool() as pool:
         pool.map(partial(compare_measures, net, pnets, rev_perms),

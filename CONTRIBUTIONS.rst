@@ -42,7 +42,7 @@ Contributors
 - `Jan Feldhoff <feldhoff@pik-potsdam.de>`_ (extended ``timeseries``)
 - Aljoscha Rheinwalt
 - Hannes Kutza
-- `Boyan Beronov <beronov@pik-potsdam.de>`_ (restructured, updated and linted
+- `Boyan Beronov <beronov@cs.ubc.ca>`_ (restructured, updated and linted
   codebase and documentation, consolidated original packaging, prepared
   Cythonization and migration to Python 3, managed open-sourcing, introduced CI,
   migrated to PEP 517/518 package format, overhauled the Python/Cython interface,
