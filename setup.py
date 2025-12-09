@@ -51,4 +51,4 @@ extensions = [
 setup(ext_modules=cythonize(
     extensions,
     compiler_directives=cy_args,
-    nthreads=os.environ.get("TOX_JOBS", len(extensions))))
+    nthreads=int(os.environ.get("TOX_JOBS", len(extensions)))))

@@ -34,7 +34,6 @@ notifications:
 os: linux
 dist: noble
 arch: arm64
-virt: lxd
 language: generic
 
 env:
