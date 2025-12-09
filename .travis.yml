@@ -32,11 +32,15 @@ notifications:
 # default jobs: Linux, all Python versions ====================================
 
 os: linux
-dist: focal
+dist: noble
 arch: arm64
 virt: lxd
 language: generic
+
 env:
+  global:
+    # limit procs to available cores
+    - TOX_JOBS=2
   jobs:
     - PYTHON=3.14
     - PYTHON=3.13
@@ -44,7 +48,7 @@ env:
     - PYTHON=3.11
     - PYTHON=3.10
 
-before_install: export ARCH=Linux-aarch64 SED=sed
+before_install: export ARCH=Linux-aarch64
 
 install:
   - | # install Miniconda
@@ -74,11 +78,6 @@ install:
     conda list
 
 script:
-  - | # limit procs to available cores (use GNU `sed`, fail if pattern not found)
-    ${SED} -i '/nthreads=./{s//nthreads=2/;h}; ${x;/./{x;q0};x;q1}' setup.py
-    ${SED} -i '/-j ./      {s//-j 2/;      h}; ${x;/./{x;q0};x;q1}' setup.cfg
-    ${SED} -i '/-n auto/   {s//-n 2/;      h}; ${x;/./{x;q0};x;q1}' pyproject.toml
-    ${SED} -i '/jobs = ./  {s//jobs = 2/;  h}; ${x;/./{x;q0};x;q1}' pyproject.toml
   - | # install Python libs via Pip: self (+ dependencies, if on Windows)
     travis_retry pip install -v -e . --group tests --group docs
   - | # run test suite
@@ -88,7 +87,7 @@ script:
 after_success: codecov
 
 
-# modified jobs for Windows, newest Python version =========================
+# modified job: Windows, newest Python version ================================
 # (inherit only 1st `env.jobs` entry)
 
 jobs:
@@ -97,7 +96,7 @@ jobs:
     - os: windows
       language: shell
       before_install:
-        - export ARCH=Windows-x86_64 SED=sed
+        - export ARCH=Windows-x86_64
         - export PATH=/c/Python${PYTHON/.}:/c/Python${PYTHON/.}/Scripts:${PATH}
       install:
         - | # install executables via Chocolatey: Python, Pandoc, Codecov

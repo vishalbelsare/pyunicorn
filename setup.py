@@ -12,14 +12,17 @@
 # and J. Kurths, "Unified functional network and nonlinear time series analysis
 # for complex systems science: The pyunicorn package"
 
-from platform import system
-from setuptools import setup, Extension
 
+# pylint: disable=import-error
+from platform import system
+import os
+
+from setuptools import setup, Extension
 from Cython.Build import cythonize
 import numpy as np
 
 
-# ==============================================================================
+# =============================================================================
 
 
 win = system() == 'Windows'
@@ -29,21 +32,23 @@ c_args = {
     'define_macros': [('_GNU_SOURCE', None),
                       ('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')]}
 cy_args = {
-    'language_level': '3str', 'embedsignature': True,
+    'language_level': '3', 'embedsignature': True,
     'boundscheck': True, 'wraparound': False,
     'initializedcheck': True, 'nonecheck': True,
     'warn.unused': True, 'warn.unused_arg': False, 'warn.unused_result': False}
 
 
-# ==============================================================================
+# =============================================================================
 
 
-setup(
-    ext_modules=cythonize(
-        [Extension(
-            f'pyunicorn.{pkg}._ext.numerics',
-            sources=[f'src/pyunicorn/{pkg}/_ext/numerics.pyx'],
-            **c_args)
-         for pkg in ['climate', 'core', 'funcnet', 'timeseries']],
-        compiler_directives=cy_args,
-        nthreads=4))
+extensions = [
+    Extension(
+        f'pyunicorn.{pkg}._ext.numerics',
+        sources=[f'src/pyunicorn/{pkg}/_ext/numerics.pyx'],
+        **c_args)
+    for pkg in ['climate', 'core', 'funcnet', 'timeseries']]
+
+setup(ext_modules=cythonize(
+    extensions,
+    compiler_directives=cy_args,
+    nthreads=os.environ.get("TOX_JOBS", len(extensions))))

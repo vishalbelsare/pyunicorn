@@ -117,20 +117,24 @@ allowlist_externals = ["flake8", "pylint", "pytest", "sphinx-build", "pandoc"]
 
 [tool.tox.env.style]
 package = "skip"
-commands = [["flake8", "src/pyunicorn", "tests"]]
+commands = [[
+  "flake8", "-j{env:TOX_JOBS:auto}", "setup.py", "src/pyunicorn", "tests"
+]]
 
 [tool.tox.env.lint]
 package = "skip"
-commands = [["pylint", "src/pyunicorn", "tests"]]
+commands = [[
+  "pylint", "-j", "{env:TOX_JOBS:0}", "setup.py", "src/pyunicorn", "tests"
+]]
 
 [tool.tox.env.test]
 package = "sdist"
-commands = [["pytest", "--cov"]]
+commands = [["pytest", "-n", "{env:TOX_JOBS:auto}", "--cov"]]
 
 [tool.tox.env.docs]
 package = "sdist"
 commands = [[
-  "sphinx-build", "-v", "-j", "8", "-W", "-b", "html",
+  "sphinx-build", "-v", "-j", "{env:TOX_JOBS:8}", "-W", "-b", "html",
   "-d", "{envtmpdir}/doctrees", "docs/source", "{envtmpdir}/html"
 ]]
 
