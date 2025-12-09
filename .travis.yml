@@ -32,7 +32,7 @@ notifications:
 # default jobs: Linux, all Python versions ====================================
 
 os: linux
-dist: jammy
+dist: focal
 arch: arm64
 virt: lxd
 language: generic
