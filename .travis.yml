@@ -32,8 +32,9 @@ notifications:
 # default jobs: Linux, all Python versions ====================================
 
 os: linux
-dist: noble
+dist: jammy
 arch: arm64
+virt: lxd
 language: generic
 
 env:
