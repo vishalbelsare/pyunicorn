@@ -2,6 +2,42 @@
 Changelog
 =========
 
+0.9.0
+-----
+
+New/updated functionality:
+
+- enabled link/edge weighting in calculation of shortest path betweenness centrality (i.e. ``Network.betweenness()``) and
+  corrected implementation of ``Network.nsi_betweenness()`` to enable calculation of n.s.i. shortest path betweenness
+  centrality of directed networks.
+  (`#142 <https://github.com/pik-copan/pyunicorn/issues/142>`_, 
+  `#248 <https://github.com/pik-copan/pyunicorn/issues/248>`_, 
+  `#250 <https://github.com/pik-copan/pyunicorn/pull/250>`_)
+- updated and enhanced structure, documentation and testing of ``Cached`` mix-in class
+  (`#252 <https://github.com/pik-copan/pyunicorn/issues/252>`_,
+  `#253 <https://github.com/pik-copan/pyunicorn/pull/253>`_)
+
+Package:
+
+- updated CI to discontinue macOS support
+  (`1a7973b <https://github.com/pik-copan/pyunicorn/commit/1a7973b247fd2b71315ca65a7773a8807c58959c>`_)
+- updated CI to observe end-of-life for ``python=3.9`` and add support for ``python=3.14``
+  (`#253 <https://github.com/pik-copan/pyunicorn/pull/253>`_)
+- migrated ``setup.cfg`` to ``pyproject.toml`` and established support for ``uv`` package manager
+  (`1c94599 <https://github.com/pik-copan/pyunicorn/commit/1c94599e70590d4365a65e5fcd1806df9ac04510>`_)
+- simplified CI configuration wrt. limiting of processes
+  (`d8bc4a0 <https://github.com/pik-copan/pyunicorn/commit/d8bc4a0163abd279f9ff7ceea6bbbf78adb89e70>`_)
+
+Documentation:
+
+- minor fix in API documentation (`#246 <https://github.com/pik-copan/pyunicorn/pull/246>`_)
+
+Bug Fixes:
+
+- updated download URL for test data 
+  (`40cd2b9 <https://github.com/pik-copan/pyunicorn/commit/40cd2b96b69a377d1d300b399982ef171fedb6d2>`_,
+  `#251 <https://github.com/pik-copan/pyunicorn/issues/251>`_)
+
 0.8.2
 -----
 
@@ -27,7 +63,6 @@ Bug Fixes:
 - Fixed bugs in parallel code of ``Network`` class as well as ``utils.mpi`` example scripts
   (`#241 <https://github.com/pik-copan/pyunicorn/issues/241>`_,
   `#242 <https://github.com/pik-copan/pyunicorn/pull/242>`_).
-
 
 0.8.0
 -----
