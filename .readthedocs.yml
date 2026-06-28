@@ -30,4 +30,6 @@ sphinx:
 python:
   install:
     - method: uv
-      command: sync --group docs
+      command: sync
+      groups:
+        - docs
